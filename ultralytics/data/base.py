@@ -251,6 +251,8 @@ class BaseDataset(Dataset):
         return im
 
     def _merge_channels_rgb(self, im_visible, im_infrared):
+        if im_visible.shape[:2] != im_infrared.shape[:2]:
+            im_infrared = cv2.resize(im_infrared, (im_visible.shape[1], im_visible.shape[0]))
         b, g, r = cv2.split(im_visible)
         b2, g2, r2 = cv2.split(im_infrared)
         im = cv2.merge((b, g, r, b2, g2, r2))

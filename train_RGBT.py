@@ -18,9 +18,9 @@ if __name__ == '__main__':
     
     # Start training
     model.train(
-        data='data.yaml', 
+        data='/home/radar/Desktop/data.yaml', 
         epochs=100, 
         batch=16, 
         imgsz=640, 
-        device='mps'  # Optimized for Apple Silicon
+        device='cuda'  # Optimized for jetson
     )

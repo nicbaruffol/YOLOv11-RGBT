@@ -6,9 +6,11 @@ from tqdm import tqdm
 # Define path to your IR images
 # Update this path to match your data.yaml 'train_ir' and 'val_ir' paths
 ir_paths = [
-    "/Users/nic/Desktop/Semester Thesis/Anti-UAV-YOLO/images/train/infrared",
-    "/Users/nic/Desktop/Semester Thesis/Anti-UAV-YOLO/images/val/infrared"
+    "/home/radar/Desktop/dataset/infrared/test",
+    "/home/radar/Desktop/dataset/infrared/train",
+    "/home/radar/Desktop/dataset/infrared/val"
 ]
+
 
 def convert_to_grayscale(folder_path):
     print(f"Processing {folder_path}...")

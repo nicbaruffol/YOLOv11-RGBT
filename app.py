@@ -72,11 +72,13 @@ def process_video(mode, rgb_path, ir_path):
             
             # .plot() automatically draws the bounding boxes and confidence scores
             frames[0] = results[0].plot() 
+            final_frame = frames[0]
             
         elif mode == "Thermal Only":
             # Run inference on the infrared frame
             results = model_ir(frames[0], verbose=False)
             frames[0] = results[0].plot()
+            final_frame = frames[0]
             
         elif mode == "Combined RGB-T":
             # If you are running two separate models side-by-side:
@@ -85,6 +87,7 @@ def process_video(mode, rgb_path, ir_path):
             
             frames[0] = res_rgb[0].plot()
             frames[1] = res_ir[0].plot()
+            final_frame = np.hstack((frames[0], frames[1]))
 
         out.write(final_frame)
 
