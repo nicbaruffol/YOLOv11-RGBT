@@ -1,0 +1,25 @@
+# --------------------------------------------------------
+# Anti-UAV RGB-T Dataset Configuration for YOLOv11-RGBT
+# --------------------------------------------------------
+
+# Base path to the dataset we just converted
+path: /Users/nic/Desktop/Semester Thesis/Anti-UAV-YOLO
+
+# Standard keys (required for validation)
+train: images/train/visible
+val: images/val/visible
+
+# Training sets for both modalities
+train_vis: images/train/visible
+train_ir: images/train/infrared
+
+# Validation sets for both modalities
+val_vis: images/val/visible
+val_ir: images/val/infrared
+
+# Number of classes
+nc: 1
+
+# Class names
+names:
+  0: UAV
