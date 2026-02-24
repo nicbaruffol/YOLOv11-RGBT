@@ -2,16 +2,15 @@ import gradio as gr
 import cv2
 import tempfile
 import numpy as np
-from ultralytics import YOLO  # NEW: Import YOLO
+from ultralytics import YOLO
 
-model_rgb = YOLO("runs/train/rgb_training/weights/best.pt")
-model_ir = YOLO("runs/train/ir_training/weights/best.pt")
+# Load all three models at the top of your script
+model_rgbt = YOLO("runs/Anti-UAV/yolo11n-RGBRGB6C-midfusion/weights/best.pt")
+model_rgb = YOLO("runs/train/rgb_training/weights/best.pt") # Update with your real path
+model_ir = YOLO("runs/train/ir_training/weights/best.pt")   # Update with your real path
 
-# If you trained the unified dual-stream RGBT model, load it here
-model_rgbt = YOLO("runs/train/rgbt_training/weights/best.pt")
-
-def process_video(mode, rgb_path, ir_path):
-    # Error checking to ensure the user uploaded the required videos
+# --- UPDATED: Added conf_thresh to the function signature ---
+def process_video(mode, rgb_path, ir_path, conf_thresh):
     if mode in ["RGB Only", "Combined RGB-T"] and not rgb_path:
         return None
     if mode in ["Thermal Only", "Combined RGB-T"] and not ir_path:
@@ -22,72 +21,77 @@ def process_video(mode, rgb_path, ir_path):
         caps.append(cv2.VideoCapture(rgb_path))
     elif mode == "Thermal Only":
         caps.append(cv2.VideoCapture(ir_path))
-    else:  # Combined
+    else:  
         caps.append(cv2.VideoCapture(rgb_path))
         caps.append(cv2.VideoCapture(ir_path))
 
-    # Extract properties from the first valid video stream
     cap_ref = caps[0]
     width = int(cap_ref.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap_ref.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap_ref.get(cv2.CAP_PROP_FPS))
 
-    # If combined, the output video will be twice as wide (side-by-side)
     out_width = width * 2 if mode == "Combined RGB-T" else width
-    
     output_video_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_video_path, fourcc, fps, (out_width, height))
+    out = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (out_width, height))
 
     while True:
         frames = []
         ret_flags = []
         
-        # Read a frame from all active video captures
         for cap in caps:
             ret, frame = cap.read()
             ret_flags.append(ret)
             frames.append(frame)
             
-        # If any video stream ends, stop processing
         if not all(ret_flags):
             break
 
         # ---------------------------------------------------------
-        # --- INFERENCE PLACEMENT ---
-        # If RGB Only: results = rgb_model(frames[0])
-        # If IR Only: results = ir_model(frames[0])
-        # If Combined: results = rgbt_model(frames[0], frames[1])
+        # --- MODE 1: COMBINED RGB-T (6-Channel Fusion) ---
         # ---------------------------------------------------------
+        if mode == "Combined RGB-T":
+            rgb_frame = frames[0]
+            ir_frame = frames[1]
 
-        # Mock drawing bounding boxes on the active frames
-        for frame in frames:
-            cv2.rectangle(frame, (200, 200), (400, 400), (0, 255, 0), 3)
-            cv2.putText(frame, 'UAV - 0.95', (200, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            if rgb_frame.shape[:2] != ir_frame.shape[:2]:
+                ir_frame = cv2.resize(ir_frame, (rgb_frame.shape[1], rgb_frame.shape[0]))
 
-        if mode == "RGB Only":
-            # Run inference on the visible frame
-            # verbose=False stops it from printing to the console every single frame
-            results = model_rgb(frames[0], verbose=False)
+            six_channel_frame = np.concatenate((rgb_frame, ir_frame), axis=-1)
+
+            # --- UPDATED: Pass conf_thresh into the model ---
+            results = model_rgbt(six_channel_frame, conf=conf_thresh, verbose=False)
+
+            rgb_plotted = rgb_frame.copy()
+            ir_plotted = ir_frame.copy()
             
-            # .plot() automatically draws the bounding boxes and confidence scores
-            frames[0] = results[0].plot() 
-            final_frame = frames[0]
+            for box in results[0].boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                conf = float(box.conf[0])
+                label = f'UAV {conf:.2f}'
+                
+                cv2.rectangle(rgb_plotted, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(rgb_plotted, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                
+                cv2.rectangle(ir_plotted, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(ir_plotted, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+            final_frame = np.hstack((rgb_plotted, ir_plotted))
             
+        # ---------------------------------------------------------
+        # --- MODE 2: RGB ONLY ---
+        # ---------------------------------------------------------
+        elif mode == "RGB Only":
+            # --- UPDATED: Pass conf_thresh into the model ---
+            results = model_rgb(frames[0], conf=conf_thresh, verbose=False)
+            final_frame = results[0].plot()
+            
+        # ---------------------------------------------------------
+        # --- MODE 3: THERMAL ONLY ---
+        # ---------------------------------------------------------
         elif mode == "Thermal Only":
-            # Run inference on the infrared frame
-            results = model_ir(frames[0], verbose=False)
-            frames[0] = results[0].plot()
-            final_frame = frames[0]
-            
-        elif mode == "Combined RGB-T":
-            # If you are running two separate models side-by-side:
-            res_rgb = model_rgb(frames[0], verbose=False)
-            res_ir = model_ir(frames[1], verbose=False)
-            
-            frames[0] = res_rgb[0].plot()
-            frames[1] = res_ir[0].plot()
-            final_frame = np.hstack((frames[0], frames[1]))
+            # --- UPDATED: Pass conf_thresh into the model ---
+            results = model_ir(frames[0], conf=conf_thresh, verbose=False)
+            final_frame = results[0].plot()
 
         out.write(final_frame)
 
@@ -97,51 +101,53 @@ def process_video(mode, rgb_path, ir_path):
 
     return output_video_path
 
-# --- UI Visibility Logic ---
 def update_inputs(mode):
-    """Dynamically shows/hides video input fields based on the selected mode."""
     if mode == "RGB Only":
         return gr.update(visible=True), gr.update(visible=False)
     elif mode == "Thermal Only":
         return gr.update(visible=False), gr.update(visible=True)
-    else:  # Combined RGB-T
+    else:  
         return gr.update(visible=True), gr.update(visible=True)
 
-
-# --- Build the UI Layout ---
 with gr.Blocks(theme=gr.themes.Soft()) as app:
     gr.Markdown("## 🚁 Multi-Modal Anti-UAV Detection Dashboard")
     
     with gr.Row():
         with gr.Column(scale=1):
-            # Mode Selection
             mode_selector = gr.Radio(
                 choices=["RGB Only", "Thermal Only", "Combined RGB-T"],
                 value="RGB Only",
                 label="Select Detection Mode"
             )
             
-            # Input Videos
             rgb_input = gr.Video(label="RGB Video", visible=True)
             ir_input = gr.Video(label="Thermal (IR) Video", visible=False)
+            
+            # --- NEW: Confidence Slider ---
+            conf_slider = gr.Slider(
+                minimum=0.01, 
+                maximum=1.0, 
+                value=0.25, 
+                step=0.01, 
+                label="Confidence Threshold",
+                info="Higher values = stricter detections"
+            )
             
             process_btn = gr.Button("Detect Drones", variant="primary")
             
         with gr.Column(scale=2):
-            # Output Video
             output_video = gr.Video(label="Detection Output")
 
-    # Link the radio buttons to the UI update function
     mode_selector.change(
         fn=update_inputs, 
         inputs=mode_selector, 
         outputs=[rgb_input, ir_input]
     )
 
-    # Link the run button to the processing function
+    # --- UPDATED: Added conf_slider to the inputs array ---
     process_btn.click(
         fn=process_video, 
-        inputs=[mode_selector, rgb_input, ir_input], 
+        inputs=[mode_selector, rgb_input, ir_input, conf_slider], 
         outputs=output_video
     )
 
