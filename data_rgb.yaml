@@ -1,0 +1,5 @@
+path: /cluster/scratch/nbaruffol/dataset
+train: visible/train
+val: visible/val_subset  # Or your val_subset if you are using the speed trick!
+nc: 1
+names: ['UAV']
