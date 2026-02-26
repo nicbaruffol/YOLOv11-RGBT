@@ -147,8 +147,6 @@ wandb/
 result3/
 # Neural Network weights -----------------------------------------------------------------------------------------------
 *.pb
-*.onnx
-*.engine
 *.mlmodel
 *.mlpackage
 *.torchscript
