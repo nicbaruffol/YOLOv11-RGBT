@@ -1,5 +1,5 @@
 path: /cluster/scratch/nbaruffol/dataset
 train: infrared/train
-val: infrared/val_subset  # Or your val_subset if you are using the speed trick!
+val: infrared/val  # Or your val_subset if you are using the speed trick!
 nc: 1
 names: ['UAV']

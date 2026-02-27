@@ -210,12 +210,29 @@ class BaseDataset(Dataset):
             im = self._merge_channels(im_visible, im_infrared)
         elif use_simotm == 'RGBRGB6C':
             im_visible = imread(file_path)  # BGR
-            im_infrared = imread(file_path.replace(pairs_rgb, pairs_ir))  # BGR
+            
+            # 1. Fix the file path logic to handle BOTH the directory and the filename
+            # This replaces the folder (via pairs) AND the filename tag
+            ir_path = file_path.replace(pairs_rgb, pairs_ir).replace('visible', 'infrared')
+            
+            im_infrared = imread(ir_path)  # BGR
 
+            # 2. Better error handling to see exactly where it's looking
             if im_visible is None or im_infrared is None:
-                raise FileNotFoundError(f"Image Not Found {file_path}")
+                raise FileNotFoundError(f"Image Not Found!\n RGB Path: {file_path}\n IR Path: {ir_path}")
 
+            # 3. Call your default resize logic
             im_visible, im_infrared = self._resize_images(im_visible, im_infrared)
+            
+            # 4. Force Datatype Match (Fixes OpenCV depth error)    
+            if im_visible.dtype != im_infrared.dtype:
+                im_infrared = im_infrared.astype(im_visible.dtype)
+                
+            # 5. Force Shape Match (Fixes OpenCV size error just in case _resize_images fails)
+            if im_visible.shape[:2] != im_infrared.shape[:2]:
+                target_size = (im_visible.shape[1], im_visible.shape[0])
+                im_infrared = cv2.resize(im_infrared, target_size, interpolation=cv2.INTER_LINEAR)
+
             im = self._merge_channels_rgb(im_visible, im_infrared)
         else:
             im = imread(file_path, cv2.IMREAD_COLOR)  # BGR
