@@ -3,7 +3,7 @@ warnings.filterwarnings('ignore')
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    model = YOLO('YOLOv11-RGBT/runs/Anti-UAV/yolo11n-RGBRGB/weights/best.pt')  # 只是将yaml里面的 ch设置成 6 ,红外部分改为 SilenceChannel, [ 3,6 ] 即可
+    model = YOLO('runs/Anti-UAV/yolo11n-RGBRGB23/weights/last.pt')  # 只是将yaml里面的 ch设置成 6 ,红外部分改为 SilenceChannel, [ 3,6 ] 即可
     # model.load(r'yolo11n-RGBRGB6C-midfussion.pt') # loading pretrain weights 网盘下载
     model.train(data='data_rgb_ir.yaml',
                 imgsz=640,
