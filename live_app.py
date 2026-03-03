@@ -32,8 +32,8 @@ BasePredictor.setup_model = patched_setup_model
 # -----------------------------
 
 print("Loading TensorRT engines...")
-model_rgb = YOLO("runs/Anti-UAV/yolo11n-RGB-Only2/weights/best.engine", task="detect")
-model_ir = YOLO("runs/Anti-UAV/yolo11n-IR-Only/weights/best.engine", task="detect")
+model_rgb = YOLO("runs/Anti-UAV/yolo11n-RGB-Only3/weights/best.engine", task="detect")
+model_ir = YOLO("runs/Anti-UAV/yolo11n-IR-Only2/weights/best.engine", task="detect")
 model_rgbt = YOLO("runs/Anti-UAV/yolo11n-RGBRGB/weights/best.engine", task="detect")
 print("Engines loaded successfully!")
 
