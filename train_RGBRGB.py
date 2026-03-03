@@ -20,6 +20,6 @@ if __name__ == '__main__':
                 channels=6,  #
                 project='runs/Anti-UAV',
                 name='yolo11n-RGBRGB2',  # name of the training run
-                patience=20,  # early stopping patience
+                patience=10,  # early stopping patience
                 # val=True,
                 )
