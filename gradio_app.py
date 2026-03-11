@@ -4,6 +4,16 @@ import tempfile
 import numpy as np
 from ultralytics import YOLO
 from ultralytics.engine.predictor import BasePredictor
+from sahi import AutoDetectionModel
+from sahi.predict import get_sliced_prediction
+
+# Wrap your existing TensorRT models for SAHI (We'll do RGB as an example)
+sahi_model_rgb = AutoDetectionModel.from_pretrained(
+    model_type='yolov8', 
+    model_path="runs/Anti-UAV/yolo11n-RGB-Only2/weights/best.engine",
+    confidence_threshold=0.25,
+    device="cuda:0"
+)
 
 # --- METADATA BYPASS PATCH ---
 # This intercepts the YOLO initialization and forces it to use the correct 
@@ -78,8 +88,26 @@ def process_video(mode, rgb_path, ir_path):
 
         # --- INFERENCE ---
         if mode == "RGB Only":
-            results = model_rgb(frames[0], verbose=False)
-            final_frame = results[0].plot() 
+            if use_sahi:
+                # 🚀 LONG RANGE MODE: Slice the frame into 640x640 chunks
+                result = get_sliced_prediction(
+                    frames[0],
+                    sahi_model_rgb,
+                    slice_height=640,
+                    slice_width=640,
+                    overlap_height_ratio=0.2,
+                    overlap_width_ratio=0.2
+                )
+                # Convert SAHI result back to a plottable image array
+                final_frame = result.image.copy()
+                for object_prediction in result.object_prediction_list:
+                    # Draw bounding boxes manually or use SAHI's export
+                    bbox = object_prediction.bbox.to_xyxy()
+                    cv2.rectangle(final_frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 255, 0), 2)
+            else:
+                # 🏃 FAST MODE: Standard YOLO resize
+                results = model_rgb(frames[0], verbose=False)
+                final_frame = results[0].plot()
             
         elif mode == "Thermal Only":
             results = model_ir(frames[0], verbose=False)
@@ -129,6 +157,13 @@ with gr.Blocks(theme=gr.themes.Soft()) as app:
                 label="Select Detection Mode"
             )
             
+            # Add a toggle for long-range detection
+            sahi_toggle = gr.Checkbox(
+                label="Enable High-Res Tiling (For distant drones)", 
+                value=False,
+                info="Slower, but prevents small objects from being downscaled."
+            )
+
             rgb_input = gr.Video(label="RGB Video", visible=True)
             ir_input = gr.Video(label="Thermal (IR) Video", visible=False)
             
@@ -139,7 +174,11 @@ with gr.Blocks(theme=gr.themes.Soft()) as app:
             final_output = gr.Video(label="Final Downloadable Video")
 
     mode_selector.change(fn=update_inputs, inputs=mode_selector, outputs=[rgb_input, ir_input])
-    process_btn.click(fn=process_video, inputs=[mode_selector, rgb_input, ir_input], outputs=[live_feed, final_output])
-
+    process_btn.click(
+            fn=process_video, 
+            inputs=[mode_selector, rgb_input, ir_input, sahi_toggle], 
+            outputs=[live_feed, final_output]
+        )
+    
 if __name__ == "__main__":
     app.launch(server_name="0.0.0.0", server_port=7860)
