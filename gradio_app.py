@@ -4,50 +4,88 @@ import tempfile
 import numpy as np
 from ultralytics import YOLO
 from ultralytics.engine.predictor import BasePredictor
-from sahi import AutoDetectionModel
+from sahi.models.ultralytics import UltralyticsDetectionModel
 from sahi.predict import get_sliced_prediction
 
-# Wrap your existing TensorRT models for SAHI (We'll do RGB as an example)
-sahi_model_rgb = AutoDetectionModel.from_pretrained(
-    model_type='yolov8', 
-    model_path="runs/Anti-UAV/yolo11n-RGB-Only2/weights/best.engine",
-    confidence_threshold=0.25,
-    device="cuda:0"
-)
-
-# --- METADATA BYPASS PATCH ---
-# This intercepts the YOLO initialization and forces it to use the correct 
-# channel counts directly from the TensorRT hardware bindings, ignoring buggy metadata.
+# ---------------------------------------------------------
+# 1. APPLY THE METADATA BYPASS PATCH FIRST!
+# ---------------------------------------------------------
 original_setup_model = BasePredictor.setup_model
 
 def patched_setup_model(self, model, verbose=False):
-    # Run the standard initialization
     original_setup_model(self, model, verbose)
-    
-    # Force the Predictor to use the actual engine shapes
     try:
-        for k, v in self.model.bindings.items():
-            shape = v.shape if hasattr(v, 'shape') else v.get('shape')
-            # Look for the 4-dimensional input binding [Batch, Channels, Height, Width]
-            if shape and len(shape) == 4:
-                self.channels = shape[1]  # Automatically sets to 3 or 6!
-                break
-    except Exception:
-        # Bulletproof fallback based on the file path just in case
-        weights = str(getattr(self.model, 'weights', ''))
-        self.channels = 6 if 'RGBRGB' in weights else 3
+        weights_path = str(getattr(self.model, 'weights', ''))
+        if 'RGBRGB' in weights_path:
+            self.channels = 6
+        else:
+            self.channels = 3
+    except Exception as e:
+        print(f"Bypass patch warning: {e}")
+        self.channels = 3 
 
 BasePredictor.setup_model = patched_setup_model
-# -----------------------------
+
+# ---------------------------------------------------------
+# 2. DEFINE CUSTOM WRAPPER
+# ---------------------------------------------------------
+class TensorRTSahiModel(UltralyticsDetectionModel):
+    def load_model(self):
+        try:
+            self.model = YOLO(self.model_path, task="detect")
+            # Skipping model.to(self.device) so TensorRT doesn't crash
+            
+            # THE FIX: Manually extract class names for SAHI
+            if hasattr(self.model, 'names') and self.model.names:
+                # Convert integer keys to strings, which SAHI requires
+                self.category_mapping = {str(k): v for k, v in self.model.names.items()}
+            else:
+                # Safe fallback just in case the TensorRT engine stripped the metadata entirely
+                self.category_mapping = {"0": "target"} 
+                
+        except Exception as e:
+            raise TypeError(f"Failed to load TensorRT model: {e}")
+
+# ---------------------------------------------------------
+# 3. LOAD SAHI ENGINES (Now protected by the patch)
+# ---------------------------------------------------------
+print("Loading SAHI TensorRT engines...")
+
+sahi_model_rgb = TensorRTSahiModel(
+    model_path="runs/Anti-UAV/yolo11n-RGB-Only3/weights/best.engine",
+    confidence_threshold=0.25,
+    device="cuda:0" 
+)
+
+print("Warming up RGB engine to build CUDA context...")
+dummy_rgb = np.zeros((640, 640, 3), dtype=np.uint8)
+sahi_model_rgb.model(dummy_rgb, verbose=False)
+
+
+# 2. Load the Thermal (IR) SAHI Model
+sahi_model_ir = TensorRTSahiModel(
+    model_path="runs/Anti-UAV/yolo11n-IR-Only2/weights/best.engine",
+    confidence_threshold=0.25,
+    device="cuda:0" 
+)
+
+print("Warming up IR engine to build CUDA context...")
+dummy_ir = np.zeros((640, 640, 3), dtype=np.uint8)
+sahi_model_ir.model(dummy_ir, verbose=False)
+
+print("SAHI Engines loaded successfully!")
+
+
+
 
 # Load the optimized TensorRT engines
 print("Loading TensorRT engines... This may take a moment.")
-model_rgb = YOLO("runs/Anti-UAV/yolo11n-RGB-Only2/weights/best.engine", task="detect")
-model_ir = YOLO("runs/Anti-UAV/yolo11n-IR-Only/weights/best.engine", task="detect")
-model_rgbt = YOLO("runs/Anti-UAV/yolo11n-RGBRGB/weights/best.engine", task="detect")
+model_rgb = YOLO("runs/Anti-UAV/yolo11n-RGB-Only3/weights/best.engine", task="detect")
+model_ir = YOLO("runs/Anti-UAV/yolo11n-IR-Only2/weights/best.engine", task="detect")
+model_rgbt = YOLO("runs/Anti-UAV/yolo11n-RGBRGB2/weights/best.engine", task="detect")
 print("Engines loaded successfully!")
 
-def process_video(mode, rgb_path, ir_path):
+def process_video(mode, rgb_path, ir_path, use_sahi):
     if mode in ["RGB Only", "Combined RGB-T"] and not rgb_path:
         raise gr.Error("Please upload an RGB video.")
     if mode in ["Thermal Only", "Combined RGB-T"] and not ir_path:
@@ -99,7 +137,7 @@ def process_video(mode, rgb_path, ir_path):
                     overlap_width_ratio=0.2
                 )
                 # Convert SAHI result back to a plottable image array
-                final_frame = result.image.copy()
+                final_frame = frames[0].copy()
                 for object_prediction in result.object_prediction_list:
                     # Draw bounding boxes manually or use SAHI's export
                     bbox = object_prediction.bbox.to_xyxy()
@@ -181,4 +219,4 @@ with gr.Blocks(theme=gr.themes.Soft()) as app:
         )
     
 if __name__ == "__main__":
-    app.launch(server_name="0.0.0.0", server_port=7860)
+    app.launch(server_name="0.0.0.0", server_port=7860, share=True)

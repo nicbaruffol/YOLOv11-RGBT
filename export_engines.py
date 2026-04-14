@@ -49,18 +49,11 @@ def export_model(weights_path, channels):
     print(f"--- Finished exporting {weights_path} ---")
 
 if __name__ == "__main__":
-    # Export RGB Model (Force 3 channels)
-<<<<<<< HEAD
-    export_model("runs/Anti-UAV/yolo11n-RGB-Only3/weights/best.pt", 3)
+    # Export RGB Model (Force 3 channels)       
+    export_model("YOLOv11-RGBT/runs/Anti-UAV/yolo11n-RGB-Only3/weights/best.pt", 3)
     
     # Export Thermal Model (Force 3 channe ls)
-    export_model("runs/Anti-UAV/yolo11n-IR-Only2/weights/best.pt", 3)
-=======
-    #export_model("YOLOv11-RGBT/runs/Anti-UAV/yolo11n-RGB-Only3/weights/best.pt", 3)
-    
-    # Export Thermal Model (Force 3 channe ls)
-    #export_model("YOLOv11-RGBT/runs/Anti-UAV/yolo11n-IR-Only2/weights/best.pt", 3)
->>>>>>> 27e458d239253e3a52d1b55ca8ad4d855151851b
+    export_model("YOLOv11-RGBT/runs/Anti-UAV/yolo11n-IR-Only2/weights/best.pt", 3)
     
     # Export Combined RGBT Model (Force 6 channels)
-    export_model("runs/Anti-UAV/yolo11n-RGBRGB2/weights/best.pt", 6)
+    export_model("YOLOv11-RGBT/runs/Anti-UAV/yolo11n-RGBRGB2/weights/best.pt", 6)
